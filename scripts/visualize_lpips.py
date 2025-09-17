@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 import argparse
+import os
+import sys
 from pathlib import Path
 
 import torch
 from PIL import Image
+
+# Ensure repo root is on sys.path so `ulsd_model` can be imported without installation
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
 
 import ulsd_model.models.lpips as lpips
 
@@ -71,6 +78,8 @@ def main():
     p.add_argument('--size', type=int, default=256, help='Resize shorter side to this size')
     p.add_argument('--out', type=Path, default=Path('lpips_heatmap.png'), help='Output heatmap path')
     p.add_argument('--dummy', action='store_true', help='Use dummy backbone and skip weight loading')
+    p.add_argument('--auto-download', action='store_true', help='Auto-download LPIPS weights if missing')
+    p.add_argument('--weights-url', type=str, default=None, help='Override URL for LPIPS weights download')
     args = p.parse_args()
 
     if args.img0 is None or args.img1 is None:
@@ -89,7 +98,7 @@ def main():
         setattr(lpips, 'vgg16', DummyVGG)
         setattr(lpips.LPIPS, 'load_state_dict', lambda self, sd, strict=False: None)
 
-    model = lpips.LPIPS()
+    model = lpips.LPIPS(auto_download=args.auto_download, weights_url=args.weights_url)
     with torch.no_grad():
         d = model(x0, x1, normalize=True)
         print(f'LPIPS distance: {float(d.item()):.6f}')
@@ -105,4 +114,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

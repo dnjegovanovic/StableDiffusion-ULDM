@@ -55,6 +55,8 @@ Options:
 - `--size`: resize size for both images (default 256)
 - `--out`: output path for the heatmap image (default `lpips_heatmap.png`)
 - `--dummy`: use a dummy backbone and skip weight loading (no downloads)
+ - `--auto-download`: auto-download LPIPS weights if missing
+ - `--weights-url`: override the default download URL for LPIPS weights
 
 Examples:
 - No inputs (random images, no weights needed):
@@ -64,9 +66,13 @@ Examples:
 - With real backbone and weights available locally:
 - `python scripts/visualize_lpips.py --img0 path/to/a.jpg --img1 path/to/b.jpg`
 
+With auto-download (internet required):
+- `python scripts/visualize_lpips.py --img0 a.jpg --img1 b.jpg --auto-download`
+
 **Notes on Weights**
 - The LPIPS constructor loads weights from `ulsd_model/models/weights/v0.1/vgg.pth` and a VGG16 backbone from torchvision.
 - If these weights are not present and your environment is offline, use the `--dummy` flag in the script or rely on the provided tests which already stub out weight loading.
+ - If online, you can let the script or the `LPIPS` class download weights automatically by passing `auto_download=True` (or the `--auto-download` flag). The default URL targets the official LPIPS repository.
 
 **Import Path**
 - Tests add the repo root to `sys.path` to import `ulsd_model` without installing.

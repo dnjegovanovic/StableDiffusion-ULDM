@@ -63,7 +63,9 @@ class vgg16(torch.nn.Module):
 
 # Learned perceptual metric
 class LPIPS(nn.Module):
-    def __init__(self, net='vgg', version='0.1', use_dropout=True):
+    def __init__(self, net='vgg', version='0.1', use_dropout=True,
+                 auto_download: bool = False, weights_url: str | None = None,
+                 backbone_pretrained: bool = True):
         super(LPIPS, self).__init__()
         self.version = version
         # Imagenet normalization
@@ -73,7 +75,7 @@ class LPIPS(nn.Module):
         # Instantiate vgg model
         self.chns = [64, 128, 256, 512, 512]
         self.L = len(self.chns)
-        self.net = vgg16(pretrained=True, requires_grad=False)
+        self.net = vgg16(pretrained=backbone_pretrained, requires_grad=False)
         
         # Add 1x1 convolutional Layers
         self.lin0 = NetLinLayer(self.chns[0], use_dropout=use_dropout)
@@ -88,10 +90,28 @@ class LPIPS(nn.Module):
         # Load the weights of trained LPIPS model
         import inspect
         import os
+        import urllib.request
         model_path = os.path.abspath(
             os.path.join(inspect.getfile(self.__init__), '..', 'weights/v%s/%s.pth' % (version, net)))
-        print('Loading model from: %s' % model_path)
-        self.load_state_dict(torch.load(model_path, map_location=device), strict=False)
+
+        def try_load(path):
+            self.load_state_dict(torch.load(path, map_location=device), strict=False)
+
+        try:
+            print('Loading model from: %s' % model_path)
+            try_load(model_path)
+        except FileNotFoundError:
+            # Optionally fetch weights from the internet if permitted
+            if auto_download:
+                os.makedirs(os.path.dirname(model_path), exist_ok=True)
+                default_url = f"https://raw.githubusercontent.com/richzhang/PerceptualSimilarity/master/lpips/weights/v{version}/{net}.pth"
+                url = weights_url or default_url
+                print(f"LPIPS weights not found. Downloading from {url} ...")
+                urllib.request.urlretrieve(url, model_path)
+                print('Download complete. Loading weights...')
+                try_load(model_path)
+            else:
+                print(f"Warning: LPIPS weights not found at {model_path}. Proceeding without pretrained LPIPS weights.")
         ########################
         
         # Freeze all parameters
