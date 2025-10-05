@@ -77,3 +77,43 @@ With auto-download (internet required):
 **Import Path**
 - Tests add the repo root to `sys.path` to import `ulsd_model` without installing.
 - If you want to import from other projects without modifying `PYTHONPATH`, consider installing this repo as a package once `setup.py` is finalized.
+
+## VQ-VAE
+
+The repository includes a Vector-Quantized VAE implementation at `ulsd_model/models/vqvae.py` (`VectorQuantizedVAE`). It encodes images into a discrete latent grid using a learnable codebook, then decodes back to pixel space.
+
+Key configuration (in `ulsd_model/config.yml` under `VQVAE`):
+- `down_channels`: encoder channels per level (length N)
+- `mid_channels`: bottleneck channels (first/last must equal `down_channels[-1]`)
+- `down_sample`: encoder downsample flags (length N)
+- `num_down_layers` / `num_mid_layers` / `num_up_layers`: residual/attention layers per block
+- `attn_down`: attention flags for encoder levels (length N)
+- `z_channels`: latent channels prior to quantization
+- `codebook_size`: number of codebook entries
+- `norm_channels`, `num_heads`: GroupNorm groups and attention heads
+
+The class exposes:
+- `forward(x) -> (recon, quantized, losses)`
+- `encode(x) -> (quantized, losses)`
+- `decode(z) -> recon`
+- `encode_with_indices(x) -> (quantized, losses, indices)` for analysis/visualization
+
+### VQ-VAE Visualization
+
+Use `scripts/vqvae_visualize.py` to generate side-by-side original vs reconstruction and a heatmap of code indices, plus a codebook usage histogram and quantization loss report per image.
+
+Examples:
+- `python scripts/vqvae_visualize.py path/to/image.jpg --out viz_out`
+- `python scripts/vqvae_visualize.py ./samples --out viz_out`
+- `python scripts/vqvae_visualize.py ./samples --config ulsd_model/config.yml --device cpu`
+
+Outputs per input image:
+- `<stem>_recon.png`: reconstructed image
+- `<stem>_recon_indices.png`: original | reconstruction | code index heatmap
+- `<stem>_code_hist.png`: code usage histogram with approximate perplexity
+- `<stem>_loss.txt`: quantizer losses (`codebook`, `commitment`)
+
+Notes:
+- The VQ-VAE depends on UNet blocks from `ddpm_model.models.UNetBlocks`. Ensure your `ddpm_model` package is installed and importable when running the visualization.
+- The heatmap scales the discrete code indices to the image size using nearest-neighbor for readability.
+- Extra deps for the script: `matplotlib`, `Pillow`, `PyYAML`.
