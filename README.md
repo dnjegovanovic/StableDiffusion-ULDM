@@ -117,3 +117,13 @@ Notes:
 - The VQ-VAE depends on UNet blocks from `ddpm_model.models.UNetBlocks`. Ensure your `ddpm_model` package is installed and importable when running the visualization.
 - The heatmap scales the discrete code indices to the image size using nearest-neighbor for readability.
 - Extra deps for the script: `matplotlib`, `Pillow`, `PyYAML`.
+
+### VQ-VAE Architecture Diagram
+
+Generate a simple left-to-right architecture diagram directly from the config (no model instantiation required):
+
+```
+python scripts/vqvae_architecture_diagram.py --config ulsd_model/config.yml --out vqvae_architecture.png
+```
+
+This renders encoder down blocks, bottleneck, quantizer, and decoder up blocks, annotated with channels, attention flags, and sampling operations. The script only depends on `matplotlib` and `PyYAML`.
