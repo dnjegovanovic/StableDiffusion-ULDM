@@ -4,6 +4,7 @@ Implementation of Uncoditional Latent Stable Diffusion model
 **Overview**
 - Repository includes a self-contained LPIPS implementation under `ulsd_model/models/lpips.py` used for perceptual distance.
 - Tests and a small visualization script are provided to validate and explore LPIPS without needing to download weights.
+- PatchGAN-style discriminator under `ulsd_model/models/discriminator.py` for adversarial training experiments, complete with unit tests for configuration and forward behaviour.
 
 **Requirements**
 - Python 3.9+
@@ -19,7 +20,9 @@ Note: If you plan to use the full VGG16 backbone and LPIPS weights (not required
 
 **Project Layout**
 - `ulsd_model/models/lpips.py`: LPIPS model and helpers
+- `ulsd_model/models/discriminator.py`: PatchGAN discriminator building block
 - `tests/test_lpips.py`: unit tests for LPIPS internals and forward
+- `tests/test_discriminator.py`: discriminator shape/configuration tests
 - `scripts/visualize_lpips.py`: compute LPIPS between two images and save a heatmap
 
 **Run Tests**
@@ -127,3 +130,50 @@ python scripts/vqvae_architecture_diagram.py --config ulsd_model/config.yml --ou
 ```
 
 This renders encoder down blocks, bottleneck, quantizer, and decoder up blocks, annotated with channels, attention flags, and sampling operations. The script only depends on `matplotlib` and `PyYAML`.
+
+## Discriminator
+
+`ulsd_model/models/discriminator.py` provides a PatchGAN-style discriminator intended to pair with latent decoders. It stacks configurable convolutional blocks that progressively downsample inputs and outputs a grid of logits describing the real/fake likelihood of each patch.
+
+Key traits:
+- Bias terms appear only on the input and output convolutions, matching common PatchGAN practice.
+- Intermediate blocks use `BatchNorm2d` and `LeakyReLU(0.2)` while the final block stays linear for flexible loss integration.
+- List-based hyperparameters (`kernels`, `strides`, `paddings`) are validated up front to catch mismatched lengths.
+
+Tests in `tests/test_discriminator.py` assert the expected output spatial dimensions, enforce the bias/normalization layout, and ensure configuration mismatches raise helpful assertions.
+
+**Default Flow (64×64 input, defaults)**
+
+```
+Input: (B, 3, 64, 64)
+ │
+ ├─ Conv2d(3→64, k=4, s=2, p=1) + bias
+ │   └─ LeakyReLU(0.2)
+ ├─ Conv2d(64→128, k=4, s=2, p=1)
+ │   └─ BatchNorm2d + LeakyReLU(0.2)
+ ├─ Conv2d(128→256, k=4, s=2, p=1)
+ │   └─ BatchNorm2d + LeakyReLU(0.2)
+ └─ Conv2d(256→1, k=4, s=1, p=1) + bias
+     └─ Identity (logits map)
+
+Output: (B, 1, 7, 7)  # one logit per image patch
+```
+
+**PatchGAN Intuition**
+
+- Convolution-only discriminator keeps spatial structure so every output pixel sees only a local receptive field (here ~70×70 when accounting for overlap).
+- During training, each cell in the logits map judges its respective patch as real/fake, encouraging the generator to match high-frequency details everywhere instead of only global statistics.
+
+```
+Input image                Patch decisions (7×7 logits)
+┌───────────────┐          ┌───────┬───────┬───────┬─┐
+│ ██████░░░░░░  │  ───►    │ 0.87 │ 0.91 │ 0.63 │ │
+│ ██████░░░░░░  │          ├───────┼───────┼───────┤ │
+│ ██ detail ██  │          │ 0.72 │ 0.95 │ 0.58 │ │
+│ ░░ smooth ░░  │          ├───────┼───────┼───────┤ │
+│ ░░ smooth ░░  │          │ 0.44 │ 0.51 │ 0.39 │ │
+└───────────────┘          └───────┴───────┴───────┴─┘
+           ↑ overlapping receptive field slides across the image
+```
+
+High scores imply the local texture looks real; low scores highlight where the generator needs improvement.
