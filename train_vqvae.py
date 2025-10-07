@@ -60,26 +60,6 @@ def build_dataset(name: str, **dataset_kwargs: Any) -> Iterable[Tensor]:  # Fact
     return dataset_cls(**dataset_kwargs)  # Instantiate and return the dataset
 
 
-def harmonise_vqvae_config(cfg: Dict[str, Any]) -> Dict[str, Any]:  # Ensure config lists match model expectations
-    """Pad boolean configuration lists so they match the length of channel definitions."""  # Helper explanation
-
-    cfg = dict(cfg)  # Shallow copy to avoid mutating caller's dictionary
-    down_channels = cfg.get("down_channels", [])  # Fetch encoder channel schedule
-    target_length = len(down_channels)  # Expected length for associated boolean lists
-
-    for key in ("down_sample", "attn_down"):  # Iterate over list-valued keys needing harmonisation
-        values = list(cfg.get(key, []))  # Copy existing list (or empty if missing)
-        if len(values) == target_length - 1:  # Allow legacy configs that omit final level flag
-            values.append(False)  # Default to no-op (no downsample / no attention) on final level
-        if len(values) != target_length:  # Validate final length after adjustment
-            raise ValueError(
-                f"Config key '{key}' must have length {target_length}, received {len(values)}"
-            )
-        cfg[key] = values  # Store harmonised list back into config copy
-
-    return cfg  # Return padded/validated configuration
-
-
 def ensure_dir(path: Path) -> None:  # Lightweight mkdir helper
     """Create directory if it does not already exist."""  # Docstring for helper
 
@@ -106,7 +86,7 @@ def train(config: Dict[str, Any]) -> None:  # Main training routine
     """Train the VQ-VAE (with optional adversarial regularisation) using the provided config."""  # Docstring summarising behaviour
 
     dataset_cfg = config["dataset_params"]  # Extract dataset configuration block
-    autoencoder_cfg = harmonise_vqvae_config(config["VQVAE"])  # Extract and normalise autoencoder params
+    autoencoder_cfg = config["VQVAE"] # Extract and normalise autoencoder params
     train_cfg = config["train_params"]  # Extract optimisation and logging parameters
 
     set_seed(train_cfg.get("seed", 0))  # Seed RNGs for reproducibility

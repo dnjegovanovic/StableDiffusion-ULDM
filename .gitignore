@@ -15,6 +15,9 @@ downloads/
 /data/
 ./data/
 data/*
+/mnist/
+./mnist/
+mnist/*
 eggs/
 .eggs/
 lib/
