@@ -17,10 +17,23 @@ from matplotlib.patches import Rectangle
 
 
 def parse_args():
-    ap = argparse.ArgumentParser(description="Render VQ-VAE architecture diagram from config")
-    ap.add_argument("--config", default=str(Path(__file__).resolve().parents[1] / "ulsd_model" / "config.yml"), help="Path to YAML config containing VQVAE section")
-    ap.add_argument("--out", default="vqvae_architecture.png", help="Output image path (PNG)")
-    ap.add_argument("--input-channels", type=int, default=3, help="Input image channels (for labeling)")
+    ap = argparse.ArgumentParser(
+        description="Render VQ-VAE architecture diagram from config"
+    )
+    ap.add_argument(
+        "--config",
+        default=str(Path(__file__).resolve().parents[1] / "ulsd_model" / "config.yml"),
+        help="Path to YAML config containing VQVAE section",
+    )
+    ap.add_argument(
+        "--out", default="vqvae_architecture.png", help="Output image path (PNG)"
+    )
+    ap.add_argument(
+        "--input-channels",
+        type=int,
+        default=3,
+        help="Input image channels (for labeling)",
+    )
     return ap.parse_args()
 
 
@@ -55,7 +68,14 @@ class Canvas:
         w, h = 1.2, 0.8
         left = self.x - w / 2
         right = self.x + w / 2
-        rect = Rectangle((left, self.y - h / 2), w, h, linewidth=1.0, edgecolor="#222", facecolor=color)
+        rect = Rectangle(
+            (left, self.y - h / 2),
+            w,
+            h,
+            linewidth=1.0,
+            edgecolor="#222",
+            facecolor=color,
+        )
         self.ax.add_patch(rect)
         self.ax.text(self.x, self.y, label, ha="center", va="center", fontsize=9)
         return left, right, self.y
@@ -74,9 +94,9 @@ class Canvas:
 
 def render_arch(vq_cfg: dict, input_channels: int, out_path: Path):
     down_ch: List[int] = list(vq_cfg["down_channels"])  # length N
-    mid_ch: List[int] = list(vq_cfg["mid_channels"])    # length M
+    mid_ch: List[int] = list(vq_cfg["mid_channels"])  # length M
     down_flags: List[bool] = list(vq_cfg["down_sample"])  # length N
-    attn_down: List[bool] = list(vq_cfg["attn_down"])     # length N
+    attn_down: List[bool] = list(vq_cfg["attn_down"])  # length N
     zc = int(vq_cfg["z_channels"])  # latent channels
     codebook = int(vq_cfg["codebook_size"])  # K
     n_down_layers = int(vq_cfg["num_down_layers"]) if "num_down_layers" in vq_cfg else 1
@@ -127,7 +147,9 @@ def render_arch(vq_cfg: dict, input_channels: int, out_path: Path):
     for j in range(len(mid_ch) - 1):
         C.advance()
         cur_left, cur_right, cur_y = C.box(
-            "\n".join([f"Bottleneck {j}", f"{mid_ch[j]}->{mid_ch[j+1]}", f"L={n_mid_layers}"]),
+            "\n".join(
+                [f"Bottleneck {j}", f"{mid_ch[j]}->{mid_ch[j+1]}", f"L={n_mid_layers}"]
+            ),
             color="#AFE1AF",
         )
         C.arrow_to_next(prev_right, prev_y, cur_left, cur_y)
@@ -146,7 +168,9 @@ def render_arch(vq_cfg: dict, input_channels: int, out_path: Path):
 
     # Quantizer
     C.advance()
-    cur_left, cur_right, cur_y = C.box(f"Quantize\nK={codebook}\nC={zc}", color="#F9D5E5")
+    cur_left, cur_right, cur_y = C.box(
+        f"Quantize\nK={codebook}\nC={zc}", color="#F9D5E5"
+    )
     C.arrow_to_next(prev_right, prev_y, cur_left, cur_y)
     prev_right, prev_y = cur_right, cur_y
 
@@ -165,7 +189,13 @@ def render_arch(vq_cfg: dict, input_channels: int, out_path: Path):
     for j in range(len(mid_ch) - 1, 0, -1):
         C.advance()
         cur_left, cur_right, cur_y = C.box(
-            "\n".join([f"Bottleneck {j-1}", f"{mid_ch[j]}->{mid_ch[j-1]}", f"L={n_mid_layers}"]),
+            "\n".join(
+                [
+                    f"Bottleneck {j-1}",
+                    f"{mid_ch[j]}->{mid_ch[j-1]}",
+                    f"L={n_mid_layers}",
+                ]
+            ),
             color="#AFE1AF",
         )
         C.arrow_to_next(prev_right, prev_y, cur_left, cur_y)
@@ -190,7 +220,9 @@ def render_arch(vq_cfg: dict, input_channels: int, out_path: Path):
 
     # Output head
     C.advance()
-    cur_left, cur_right, cur_y = C.box(f"GN+SiLU+Conv3x3\n{down_ch[0]}->{input_channels}")
+    cur_left, cur_right, cur_y = C.box(
+        f"GN+SiLU+Conv3x3\n{down_ch[0]}->{input_channels}"
+    )
     C.arrow_to_next(prev_right, prev_y, cur_left, cur_y)
 
     C.fig.tight_layout()

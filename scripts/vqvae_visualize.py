@@ -45,7 +45,9 @@ def tensor_to_pil(t: torch.Tensor) -> Image.Image:
     return Image.fromarray(arr)
 
 
-def make_grid_visual(original: torch.Tensor, recon: torch.Tensor, indices: torch.Tensor) -> Image.Image:
+def make_grid_visual(
+    original: torch.Tensor, recon: torch.Tensor, indices: torch.Tensor
+) -> Image.Image:
     # original/recon: [3,H,W] in [0,1]; indices: [H',W']
     H, W = original.shape[-2:]
     Hq, Wq = indices.shape
@@ -110,7 +112,9 @@ def build_model_from_config(config_path: Path, device: str):
     return model, vq_cfg
 
 
-def visualize_batch(model, vq_cfg, images: List[Path], out_dir: Path, device: str, max_side: int):
+def visualize_batch(
+    model, vq_cfg, images: List[Path], out_dir: Path, device: str, max_side: int
+):
     out_dir.mkdir(parents=True, exist_ok=True)
     for p in images:
         img = Image.open(p).convert("RGB")
@@ -126,7 +130,9 @@ def visualize_batch(model, vq_cfg, images: List[Path], out_dir: Path, device: st
 
         # Save histogram
         hist_path = out_dir / f"{p.stem}_code_hist.png"
-        plot_codebook_hist(indices[0].cpu(), int(vq_cfg.get("codebook_size", 0)), hist_path)
+        plot_codebook_hist(
+            indices[0].cpu(), int(vq_cfg.get("codebook_size", 0)), hist_path
+        )
 
         # Optionally save raw reconstruction
         recon_path = out_dir / f"{p.stem}_recon.png"
@@ -139,12 +145,24 @@ def visualize_batch(model, vq_cfg, images: List[Path], out_dir: Path, device: st
 
 
 def parse_args():
-    ap = argparse.ArgumentParser(description="Visualize VQ-VAE reconstructions and codebook usage")
-    ap.add_argument("inputs", nargs="+", help="Image files, directories, or globs to visualize")
-    ap.add_argument("--config", default=str(Path(__file__).resolve().parents[1] / "ulsd_model" / "config.yml"), help="Path to YAML config containing VQVAE section")
-    ap.add_argument("--out", default="viz_out", help="Output directory for visualizations")
+    ap = argparse.ArgumentParser(
+        description="Visualize VQ-VAE reconstructions and codebook usage"
+    )
+    ap.add_argument(
+        "inputs", nargs="+", help="Image files, directories, or globs to visualize"
+    )
+    ap.add_argument(
+        "--config",
+        default=str(Path(__file__).resolve().parents[1] / "ulsd_model" / "config.yml"),
+        help="Path to YAML config containing VQVAE section",
+    )
+    ap.add_argument(
+        "--out", default="viz_out", help="Output directory for visualizations"
+    )
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    ap.add_argument("--max-side", type=int, default=512, help="Resize images so max side <= this")
+    ap.add_argument(
+        "--max-side", type=int, default=512, help="Resize images so max side <= this"
+    )
     return ap.parse_args()
 
 
@@ -155,10 +173,11 @@ def main():
         raise SystemExit("No input images found. Provide files/dirs/globs.")
 
     model, vq_cfg = build_model_from_config(Path(args.config), args.device)
-    visualize_batch(model, vq_cfg, image_paths, Path(args.out), args.device, args.max_side)
+    visualize_batch(
+        model, vq_cfg, image_paths, Path(args.out), args.device, args.max_side
+    )
     print(f"Saved visualizations to {args.out}")
 
 
 if __name__ == "__main__":
     main()
-

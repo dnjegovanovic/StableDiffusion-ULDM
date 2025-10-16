@@ -8,7 +8,7 @@ import os
 import sys
 
 # Ensure repo root is on path for local package imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import ulsd_model.models.lpips as lpips
 
@@ -40,7 +40,9 @@ class DummyVGG(torch.nn.Module):
         h3 = expand_channels(X, 256)
         h4 = expand_channels(X, 512)
         h5 = expand_channels(X, 512)
-        VggOutputs = lpips.namedtuple("VggOutputs", ['relu1_2', 'relu2_2', 'relu3_3', 'relu4_3', 'relu5_3'])
+        VggOutputs = lpips.namedtuple(
+            "VggOutputs", ["relu1_2", "relu2_2", "relu3_3", "relu4_3", "relu5_3"]
+        )
         return VggOutputs(h1, h2, h3, h4, h5)
 
 
@@ -69,10 +71,15 @@ def test_netlinlayer_shape():
 
 def test_lpips_forward_monkeypatched(monkeypatch):
     # Avoid external weights and heavy backbones by stubbing load_state_dict and vgg16
-    monkeypatch.setattr(lpips, 'vgg16', DummyVGG, raising=True)
-    monkeypatch.setattr(lpips.LPIPS, 'load_state_dict', lambda self, sd, strict=False: None, raising=True)
+    monkeypatch.setattr(lpips, "vgg16", DummyVGG, raising=True)
+    monkeypatch.setattr(
+        lpips.LPIPS,
+        "load_state_dict",
+        lambda self, sd, strict=False: None,
+        raising=True,
+    )
     # Prevent file access for weights by stubbing torch.load used inside the module
-    monkeypatch.setattr(lpips.torch, 'load', lambda *a, **k: {}, raising=True)
+    monkeypatch.setattr(lpips.torch, "load", lambda *a, **k: {}, raising=True)
 
     torch.manual_seed(0)
     model = lpips.LPIPS()

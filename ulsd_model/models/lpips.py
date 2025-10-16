@@ -10,7 +10,7 @@ import torchvision
 
 # Taken from https://github.com/richzhang/PerceptualSimilarity/blob/master/lpips/lpips.py
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def spatial_average(in_tens, keepdim=True):
@@ -21,7 +21,9 @@ class vgg16(torch.nn.Module):
     def __init__(self, requires_grad=False, pretrained=True):
         super(vgg16, self).__init__()
         # Load pretrained vgg model from torchvision
-        vgg_pretrained_features = torchvision.models.vgg16(pretrained=pretrained).features
+        vgg_pretrained_features = torchvision.models.vgg16(
+            pretrained=pretrained
+        ).features
         self.slice1 = torch.nn.Sequential()
         self.slice2 = torch.nn.Sequential()
         self.slice3 = torch.nn.Sequential()
@@ -38,12 +40,12 @@ class vgg16(torch.nn.Module):
             self.slice4.add_module(str(x), vgg_pretrained_features[x])
         for x in range(23, 30):
             self.slice5.add_module(str(x), vgg_pretrained_features[x])
-        
+
         # Freeze vgg model
         if not requires_grad:
             for param in self.parameters():
                 param.requires_grad = False
-    
+
     def forward(self, X):
         # Return output of vgg features
         h = self.slice1(X)
@@ -56,27 +58,35 @@ class vgg16(torch.nn.Module):
         h_relu4_3 = h
         h = self.slice5(h)
         h_relu5_3 = h
-        vgg_outputs = namedtuple("VggOutputs", ['relu1_2', 'relu2_2', 'relu3_3', 'relu4_3', 'relu5_3'])
+        vgg_outputs = namedtuple(
+            "VggOutputs", ["relu1_2", "relu2_2", "relu3_3", "relu4_3", "relu5_3"]
+        )
         out = vgg_outputs(h_relu1_2, h_relu2_2, h_relu3_3, h_relu4_3, h_relu5_3)
         return out
 
 
 # Learned perceptual metric
 class LPIPS(nn.Module):
-    def __init__(self, net='vgg', version='0.1', use_dropout=True,
-                 auto_download: bool = False, weights_url: str | None = None,
-                 backbone_pretrained: bool = True):
+    def __init__(
+        self,
+        net="vgg",
+        version="0.1",
+        use_dropout=True,
+        auto_download: bool = False,
+        weights_url: str | None = None,
+        backbone_pretrained: bool = True,
+    ):
         super(LPIPS, self).__init__()
         self.version = version
         # Imagenet normalization
         self.scaling_layer = ScalingLayer()
         ########################
-        
+
         # Instantiate vgg model
         self.chns = [64, 128, 256, 512, 512]
         self.L = len(self.chns)
         self.net = vgg16(pretrained=backbone_pretrained, requires_grad=False)
-        
+
         # Add 1x1 convolutional Layers
         self.lin0 = NetLinLayer(self.chns[0], use_dropout=use_dropout)
         self.lin1 = NetLinLayer(self.chns[1], use_dropout=use_dropout)
@@ -86,19 +96,25 @@ class LPIPS(nn.Module):
         self.lins = [self.lin0, self.lin1, self.lin2, self.lin3, self.lin4]
         self.lins = nn.ModuleList(self.lins)
         ########################
-        
+
         # Load the weights of trained LPIPS model
         import inspect
         import os
         import urllib.request
+
         model_path = os.path.abspath(
-            os.path.join(inspect.getfile(self.__init__), '..', 'weights/v%s/%s.pth' % (version, net)))
+            os.path.join(
+                inspect.getfile(self.__init__),
+                "..",
+                "weights/v%s/%s.pth" % (version, net),
+            )
+        )
 
         def try_load(path):
             self.load_state_dict(torch.load(path, map_location=device), strict=False)
 
         try:
-            print('Loading model from: %s' % model_path)
+            print("Loading model from: %s" % model_path)
             try_load(model_path)
         except FileNotFoundError:
             # Optionally fetch weights from the internet if permitted
@@ -108,45 +124,53 @@ class LPIPS(nn.Module):
                 url = weights_url or default_url
                 print(f"LPIPS weights not found. Downloading from {url} ...")
                 urllib.request.urlretrieve(url, model_path)
-                print('Download complete. Loading weights...')
+                print("Download complete. Loading weights...")
                 try_load(model_path)
             else:
-                print(f"Warning: LPIPS weights not found at {model_path}. Proceeding without pretrained LPIPS weights.")
+                print(
+                    f"Warning: LPIPS weights not found at {model_path}. Proceeding without pretrained LPIPS weights."
+                )
         ########################
-        
+
         # Freeze all parameters
         self.eval()
         for param in self.parameters():
             param.requires_grad = False
         ########################
-    
+
     def forward(self, in0, in1, normalize=False):
         # Scale the inputs to -1 to +1 range if needed
-        if normalize:  # turn on this flag if input is [0,1] so it can be adjusted to [-1, +1]
+        if (
+            normalize
+        ):  # turn on this flag if input is [0,1] so it can be adjusted to [-1, +1]
             in0 = 2 * in0 - 1
             in1 = 2 * in1 - 1
         ########################
-        
+
         # Normalize the inputs according to imagenet normalization
         in0_input, in1_input = self.scaling_layer(in0), self.scaling_layer(in1)
         ########################
-        
+
         # Get VGG outputs for image0 and image1
         outs0, outs1 = self.net.forward(in0_input), self.net.forward(in1_input)
         feats0, feats1, diffs = {}, {}, {}
         ########################
-        
+
         # Compute Square of Difference for each layer output
         for kk in range(self.L):
-            feats0[kk], feats1[kk] = torch.nn.functional.normalize(outs0[kk], dim=1), torch.nn.functional.normalize(
-                outs1[kk])
+            feats0[kk], feats1[kk] = torch.nn.functional.normalize(
+                outs0[kk], dim=1
+            ), torch.nn.functional.normalize(outs1[kk])
             diffs[kk] = (feats0[kk] - feats1[kk]) ** 2
         ########################
-        
+
         # 1x1 convolution followed by spatial average on the square differences
-        res = [spatial_average(self.lins[kk](diffs[kk]), keepdim=True) for kk in range(self.L)]
+        res = [
+            spatial_average(self.lins[kk](diffs[kk]), keepdim=True)
+            for kk in range(self.L)
+        ]
         val = 0
-        
+
         # Aggregate the results of each layer
         for l in range(self.L):
             val += res[l]
@@ -159,23 +183,35 @@ class ScalingLayer(nn.Module):
         # Imagnet normalization for (0-1)
         # mean = [0.485, 0.456, 0.406]
         # std = [0.229, 0.224, 0.225]
-        self.register_buffer('shift', torch.Tensor([-.030, -.088, -.188])[None, :, None, None])
-        self.register_buffer('scale', torch.Tensor([.458, .448, .450])[None, :, None, None])
-    
+        self.register_buffer(
+            "shift", torch.Tensor([-0.030, -0.088, -0.188])[None, :, None, None]
+        )
+        self.register_buffer(
+            "scale", torch.Tensor([0.458, 0.448, 0.450])[None, :, None, None]
+        )
+
     def forward(self, inp):
         return (inp - self.shift) / self.scale
 
 
 class NetLinLayer(nn.Module):
-    ''' A single linear layer which does a 1x1 conv '''
-    
+    """A single linear layer which does a 1x1 conv"""
+
     def __init__(self, chn_in, chn_out=1, use_dropout=False):
         super(NetLinLayer, self).__init__()
-        
-        layers = [nn.Dropout(), ] if (use_dropout) else []
-        layers += [nn.Conv2d(chn_in, chn_out, 1, stride=1, padding=0, bias=False), ]
+
+        layers = (
+            [
+                nn.Dropout(),
+            ]
+            if (use_dropout)
+            else []
+        )
+        layers += [
+            nn.Conv2d(chn_in, chn_out, 1, stride=1, padding=0, bias=False),
+        ]
         self.model = nn.Sequential(*layers)
-    
+
     def forward(self, x):
         out = self.model(x)
         return out

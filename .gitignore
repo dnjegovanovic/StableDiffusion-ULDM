@@ -15,6 +15,9 @@ downloads/
 /data/
 ./data/
 data/*
+/mnist_ddpm_vqvae/
+./mnist_ddpm_vqvae/
+mnist_ddpm_vqvae/*
 /mnist/
 ./mnist/
 mnist/*

@@ -3,6 +3,7 @@ import torch.nn as nn
 
 from ddpm_model.models.UNetBlocks import DownSamplingBlock, BottleNeck, UpSamplingBlock
 
+
 class VectorQuantizedVAE(nn.Module):
     """
     Vector Quantized Variational Autoencoder (VQ-VAE) implementation with configurable architecture.
@@ -170,12 +171,12 @@ class VectorQuantizedVAE(nn.Module):
             self.bottleneck_channels[-1] == self.down_channels[-1]
         ), "Bottleneck output must match final down channel"
 
-        assert (
-            len(self.downsampling_steps) == len(self.down_channels)
+        assert len(self.downsampling_steps) == len(
+            self.down_channels
         ), "Downsampling steps must match down channels"
 
-        assert (
-            len(self.use_attention_downsample) == len(self.down_channels)
+        assert len(self.use_attention_downsample) == len(
+            self.down_channels
         ), "Attention flags must match down channels"
 
     def _quantize_latents(self, latents: torch.Tensor) -> tuple:

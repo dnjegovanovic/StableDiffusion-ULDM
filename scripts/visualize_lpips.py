@@ -8,7 +8,7 @@ import torch
 from PIL import Image
 
 # Ensure repo root is on sys.path so `ulsd_model` can be imported without installation
-REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
@@ -32,25 +32,32 @@ class DummyVGG(torch.nn.Module):
         h3 = expand_channels(X, 256)
         h4 = expand_channels(X, 512)
         h5 = expand_channels(X, 512)
-        VggOutputs = lpips.namedtuple("VggOutputs", ['relu1_2', 'relu2_2', 'relu3_3', 'relu4_3', 'relu5_3'])
+        VggOutputs = lpips.namedtuple(
+            "VggOutputs", ["relu1_2", "relu2_2", "relu3_3", "relu4_3", "relu5_3"]
+        )
         return VggOutputs(h1, h2, h3, h4, h5)
 
 
 def load_image(path, size=None):
-    img = Image.open(path).convert('RGB')
+    img = Image.open(path).convert("RGB")
     if size is not None:
         img = img.resize(size, Image.BICUBIC)
-    t = torch.from_numpy((torch.ByteTensor(torch.ByteStorage.from_buffer(img.tobytes()))
-                          .view(img.size[1], img.size[0], 3)
-                          .permute(2, 0, 1)
-                          .float()) / 255.0)
+    t = torch.from_numpy(
+        (
+            torch.ByteTensor(torch.ByteStorage.from_buffer(img.tobytes()))
+            .view(img.size[1], img.size[0], 3)
+            .permute(2, 0, 1)
+            .float()
+        )
+        / 255.0
+    )
     return t.unsqueeze(0)  # [1,3,H,W]
 
 
 def save_grayscale_map(tensor_map, out_path):
     # tensor_map: [H, W] in [0,1]
     arr = (tensor_map.clamp(0, 1) * 255.0).byte().cpu().numpy()
-    Image.fromarray(arr, mode='L').save(out_path)
+    Image.fromarray(arr, mode="L").save(out_path)
 
 
 def compute_lpips_map(model: lpips.LPIPS, x0: torch.Tensor, x1: torch.Tensor):
@@ -72,14 +79,34 @@ def compute_lpips_map(model: lpips.LPIPS, x0: torch.Tensor, x1: torch.Tensor):
 
 
 def main():
-    p = argparse.ArgumentParser(description='Visualize LPIPS distance and heatmap.')
-    p.add_argument('--img0', type=Path, required=False, help='Path to first image')
-    p.add_argument('--img1', type=Path, required=False, help='Path to second image')
-    p.add_argument('--size', type=int, default=256, help='Resize shorter side to this size')
-    p.add_argument('--out', type=Path, default=Path('lpips_heatmap.png'), help='Output heatmap path')
-    p.add_argument('--dummy', action='store_true', help='Use dummy backbone and skip weight loading')
-    p.add_argument('--auto-download', action='store_true', help='Auto-download LPIPS weights if missing')
-    p.add_argument('--weights-url', type=str, default=None, help='Override URL for LPIPS weights download')
+    p = argparse.ArgumentParser(description="Visualize LPIPS distance and heatmap.")
+    p.add_argument("--img0", type=Path, required=False, help="Path to first image")
+    p.add_argument("--img1", type=Path, required=False, help="Path to second image")
+    p.add_argument(
+        "--size", type=int, default=256, help="Resize shorter side to this size"
+    )
+    p.add_argument(
+        "--out",
+        type=Path,
+        default=Path("lpips_heatmap.png"),
+        help="Output heatmap path",
+    )
+    p.add_argument(
+        "--dummy",
+        action="store_true",
+        help="Use dummy backbone and skip weight loading",
+    )
+    p.add_argument(
+        "--auto-download",
+        action="store_true",
+        help="Auto-download LPIPS weights if missing",
+    )
+    p.add_argument(
+        "--weights-url",
+        type=str,
+        default=None,
+        help="Override URL for LPIPS weights download",
+    )
     args = p.parse_args()
 
     if args.img0 is None or args.img1 is None:
@@ -95,13 +122,13 @@ def main():
 
     if args.dummy:
         # Avoid downloading weights; use deterministic dummy and skip LPIPS weights
-        setattr(lpips, 'vgg16', DummyVGG)
-        setattr(lpips.LPIPS, 'load_state_dict', lambda self, sd, strict=False: None)
+        setattr(lpips, "vgg16", DummyVGG)
+        setattr(lpips.LPIPS, "load_state_dict", lambda self, sd, strict=False: None)
 
     model = lpips.LPIPS(auto_download=args.auto_download, weights_url=args.weights_url)
     with torch.no_grad():
         d = model(x0, x1, normalize=True)
-        print(f'LPIPS distance: {float(d.item()):.6f}')
+        print(f"LPIPS distance: {float(d.item()):.6f}")
 
         heat = compute_lpips_map(model, x0, x1)
         # Normalize heat to [0,1]
@@ -109,8 +136,8 @@ def main():
         if heat.max() > 0:
             heat = heat / heat.max()
         save_grayscale_map(heat, args.out)
-        print(f'Heatmap saved to: {args.out}')
+        print(f"Heatmap saved to: {args.out}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

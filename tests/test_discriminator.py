@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 
 # Ensure repo root on sys.path for local imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from ulsd_model.models.discriminator import Discriminator
 
@@ -25,17 +25,19 @@ def test_discriminator_forward_shape_matches_conv_config():
     x = torch.randn(2, model.im_channels, 64, 64)
 
     out = model(x)
-    expected_h, expected_w = compute_spatial_dims(64, 64, model.kernels, model.strides, model.paddings)
+    expected_h, expected_w = compute_spatial_dims(
+        64, 64, model.kernels, model.strides, model.paddings
+    )
 
     assert out.shape == (2, 1, expected_h, expected_w)
 
 
 def test_discriminator_blocks_configured_with_bias_and_norm_rules():
     cfg = {
-        'conv_channels': [32, 64],
-        'kernels': [4, 4, 3],
-        'strides': [2, 2, 1],
-        'paddings': [1, 1, 1],
+        "conv_channels": [32, 64],
+        "kernels": [4, 4, 3],
+        "strides": [2, 2, 1],
+        "paddings": [1, 1, 1],
     }
     model = Discriminator(**cfg)
 
@@ -59,4 +61,9 @@ def test_discriminator_blocks_configured_with_bias_and_norm_rules():
 
 def test_discriminator_raises_when_hyperparameter_lengths_mismatch():
     with pytest.raises(AssertionError):
-        Discriminator(conv_channels=[64, 128], kernels=[4, 4], strides=[2, 2, 2], paddings=[1, 1, 1])
+        Discriminator(
+            conv_channels=[64, 128],
+            kernels=[4, 4],
+            strides=[2, 2, 2],
+            paddings=[1, 1, 1],
+        )
