@@ -131,6 +131,40 @@ python scripts/vqvae_architecture_diagram.py --config ulsd_model/config.yml --ou
 
 This renders encoder down blocks, bottleneck, quantizer, and decoder up blocks, annotated with channels, attention flags, and sampling operations. The script only depends on `matplotlib` and `PyYAML`.
 
+## Latent DDPM Training
+
+Once the VQ-VAE has been trained, its discrete latents become the workhorse for diffusion. Rather than teaching the DDPM to denoise full-resolution pixels, we train it on the much smaller latent grid produced by the VQ-VAE encoder.
+
+**Why go latent-first?**
+- The encoder compresses MNIST frames (or any dataset configured) into a low-dimensional tensor, so the diffusion UNet sees fewer spatial locations and channels. This slashes memory and compute without sacrificing global structure.
+- Quantized latents are perceptually aligned with the original images because the decoder has already learned to reconstruct faithfully. When the DDPM denoises latents well, the decoder maps them back to sharp pixels.
+- Conditioning or guidance can be attached at the latent stage, keeping the pixel-space decoder frozen during diffusion training.
+
+**Pipeline overview (all scripts live in this repo):**
+
+```
+           ┌───────────────┐        encode         ┌────────────────┐
+images ───►│ train_vqvae.py├─────── latent z ─────►│train_ddpm_vqvae│
+           └────┬──────────┘                       └──────┬─────────┘
+                │ save reconstructions/ckpt                │ predicts noise in latent space
+                ▼                                           ▼
+         VQ-VAE checkpoint                          Diffusion checkpoint
+                │                                           │
+      decode samples during                           generate latent paths → decode
+        inference/sampling                                 with frozen VQ-VAE
+```
+
+1. **Train the VQ-VAE** (`python train_vqvae.py --config ulsd_model/config.yml`). This learns the encoder/decoder pair and saves reconstructions plus the `vqvae_autoencoder_ckpt.pth` checkpoint.
+2. **(Optional) Cache latents.** When `train_ddpm_vqvae.py` runs it can either encode batches on the fly or load pickled latents produced with the provided utilities.
+3. **Train the DDPM in latent space** (`python train_ddpm_vqvae.py --config ulsd_model/config.yml`). The script:
+   - loads the frozen VQ-VAE checkpoint,
+   - encodes MNIST images into latents,
+   - feeds those latents into a UNet that predicts the diffusion noise schedule,
+   - stores DDPM checkpoints alongside the VQ-VAE artefacts.
+4. **Sample** by running the DDPM to generate clean latents and decoding them with the same VQ-VAE decoder, recreating pixel images.
+
+The combination mirrors latent diffusion models such as Stable Diffusion: the autoencoder captures high-frequency fidelity, while the diffusion model learns the global generative prior in a compact latent space.
+
 ## Discriminator
 
 `ulsd_model/models/discriminator.py` provides a PatchGAN-style discriminator intended to pair with latent decoders. It stacks configurable convolutional blocks that progressively downsample inputs and outputs a grid of logits describing the real/fake likelihood of each patch.

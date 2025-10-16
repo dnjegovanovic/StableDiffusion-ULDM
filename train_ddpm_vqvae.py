@@ -3,7 +3,7 @@ from __future__ import annotations  # Allow postponed evaluation of type hints
 import argparse  # Parse command-line arguments for the training script
 import random  # Provide RNG seeding for reproducibility
 from pathlib import Path  # Handle filesystem paths in a platform-agnostic way
-from typing import Any, Dict, Iterable  # Expose common typing primitives
+from typing import Any, Dict, Iterable, Optional, Tuple  # Expose common typing primitives
 
 import numpy as np  # Supply numerical utilities and RNG seeding
 import torch  # Core tensor and autograd library
@@ -11,6 +11,7 @@ import yaml  # Parse configuration files stored as YAML
 from torch import Tensor  # Explicit tensor alias for type annotations
 from torch.optim import Adam  # Optimizer used to train the UNet
 from torch.utils.data import DataLoader  # Mini-batch loader for datasets
+import torchvision.utils as vutils  # Utilities for saving image grids
 from tqdm import tqdm  # Progress bar for iterative training loops
 
 from ddpm_model.models.LinearNoiseScheduler import (
@@ -74,6 +75,62 @@ def ensure_dir(path: Path) -> None:  # Create directories as needed
     )  # Recursively create directories without errors
 
 
+def save_image_grid(
+    images: torch.Tensor,  # Images expected in [0, 1]
+    directory: Path,
+    step: int,
+    nrow: int,
+    prefix: str,
+) -> None:
+    """Persist a tiled grid of images to disk."""
+
+    ensure_dir(directory)
+    grid = vutils.make_grid(
+        images.clamp(0.0, 1.0),
+        nrow=max(1, min(nrow, images.size(0))),
+        padding=2,
+    )
+    vutils.save_image(grid, directory / f"{prefix}_{step:06d}.png")
+
+
+def decode_latents_to_images(
+    latents: torch.Tensor,
+    vqvae: VQVAE,
+) -> torch.Tensor:
+    """Decode latent tensors to image space and map to [0, 1]."""
+
+    with torch.no_grad():
+        decoded = vqvae.decode(latents)
+    decoded = decoded.clamp(-1.0, 1.0)
+    return ((decoded + 1.0) / 2.0).detach().cpu()
+
+
+def sample_diffusion_latents(
+    model: UNet,
+    scheduler: LinearNoiseScheduler,
+    num_samples: int,
+    latent_shape: Tuple[int, ...],
+) -> torch.Tensor:
+    """Run the DDPM reverse process to produce latent samples."""
+
+    was_training = model.training
+    model.eval()
+
+    with torch.no_grad():
+        latents = torch.randn((num_samples, *latent_shape), device=DEVICE)
+        predicted_x0: Optional[torch.Tensor] = None
+        for t in range(scheduler.num_timesteps - 1, -1, -1):
+            t_tensor = torch.full((num_samples,), t, device=DEVICE, dtype=torch.long)
+            noise_pred = model(latents, t_tensor)
+            latents, predicted_x0 = scheduler.sample_prev_timestep(latents, noise_pred, t)
+        samples = predicted_x0 if predicted_x0 is not None else latents
+
+    if was_training:
+        model.train()
+
+    return samples.detach()
+
+
 def train(config: Dict[str, Any]) -> None:  # Main entry point for DDPM training
     """Train a DDPM on VQ-VAE latents for MNIST."""  # Summarize high-level behaviour
 
@@ -86,16 +143,19 @@ def train(config: Dict[str, Any]) -> None:  # Main entry point for DDPM training
     vqvae_cfg = config["VQVAE"]  # Extract VQ-VAE architecture definition
 
     set_seed(train_cfg.get("seed", 0))  # Seed RNGs using configured seed
-    l_path = (
-        Path(train_cfg["task_name"]) / train_cfg["vqvae_autoencoder_ckpt_name"]
-    )  # Build path to stored latents
+    l_path = Path(train_cfg["task_name"]) / train_cfg["vqvae_latent_dir_name"]
+    use_cached_latents = l_path.exists()
     dataset = build_dataset(  # Construct dataset (latents preferred when available)
         name=dataset_cfg["name"],  # Use dataset identifier from config
         dataset_split="train",  # Operate on the training split
-        use_latents=True,  # Request latents instead of raw images when present
+        use_latents=use_cached_latents,  # Request latents only when cache exists
         data_root=dataset_cfg["im_path"],  # Point to dataset root directory
-        latent_path=l_path,  # Provide path where latent pickles reside
+        latent_path=l_path if use_cached_latents else None,  # Optional latent directory
     )
+    if use_cached_latents:
+        print(f"Loaded cached latents from {l_path}")
+    else:
+        print("Latent cache not found; encoding batches on the fly.")
 
     data_loader = DataLoader(  # Prepare mini-batch loader
         dataset,  # Data source (latents or images)
@@ -106,7 +166,7 @@ def train(config: Dict[str, Any]) -> None:  # Main entry point for DDPM training
     )
 
     output_dir = Path(
-        train_cfg["task_name_ddpm_vqvae"]
+        train_cfg.get("task_name_ddpm_vqvae", train_cfg["task_name"])
     )  # Directory for checkpoints and logs
     vqvae_output_dir = Path(
         train_cfg["task_name"]
@@ -158,6 +218,31 @@ def train(config: Dict[str, Any]) -> None:  # Main entry point for DDPM training
 
     num_epochs = train_cfg["ldm_epochs"]  # Total diffusion training epochs
 
+    dataset_returns_latents = bool(getattr(dataset, "use_latents", False))
+    samples_root = output_dir / "ddpm_samples"
+    recon_dir = samples_root / "recon"
+    samples_dir = samples_root / "samples"
+    save_every = max(
+        1,
+        int(
+            train_cfg.get(
+                "ldm_img_save_steps",
+                train_cfg.get("autoencoder_img_save_steps", 100),
+            )
+        ),
+    )
+    viz_samples = max(1, int(train_cfg.get("ldm_viz_samples", 8)))
+    default_rows = int(np.ceil(np.sqrt(viz_samples)))
+    viz_rows = max(1, int(train_cfg.get("ldm_viz_rows", default_rows)))
+    viz_rows = min(viz_rows, viz_samples)
+
+    ensure_dir(recon_dir)
+    ensure_dir(samples_dir)
+
+    global_step = 0
+    sample_index = 0
+    latent_shape: Optional[Tuple[int, ...]] = None
+
     for epoch in range(num_epochs):  # Iterate through epochs
         epoch_losses: list[float] = []  # Track per-batch losses for logging
         for batch in tqdm(
@@ -165,14 +250,21 @@ def train(config: Dict[str, Any]) -> None:  # Main entry point for DDPM training
         ):  # Loop over batches with progress bar
             optimizer.zero_grad(set_to_none=True)  # Clear gradients efficiently
 
-            images = batch.float().to(
-                DEVICE, non_blocking=True
-            )  # Move latent batch to device
-            with torch.no_grad():  # Stop gradients through VQ-VAE
-                latents, _ = vqvae.encode(
-                    images
-                )  # Encode MNIST batch into quantized latents
-                latents = latents.detach()  # Detach latents from graph for safety
+            data_tensor = batch[0] if isinstance(batch, (list, tuple)) else batch
+            if isinstance(data_tensor, dict):
+                data_tensor = data_tensor.get("image", next(iter(data_tensor.values())))
+
+            data_tensor = data_tensor.to(DEVICE, non_blocking=True).float()
+
+            if dataset_returns_latents:
+                latents = data_tensor.detach()
+            else:
+                with torch.no_grad():
+                    latents, _ = vqvae.encode(data_tensor)
+                latents = latents.detach()
+
+            if latent_shape is None:
+                latent_shape = tuple(latents.shape[1:])
 
             noise = torch.randn_like(
                 latents
@@ -196,6 +288,27 @@ def train(config: Dict[str, Any]) -> None:  # Main entry point for DDPM training
             optimizer.step()  # Update UNet parameters
 
             epoch_losses.append(loss.item())  # Record scalar loss for logging
+            global_step += 1
+
+            if global_step % save_every == 0 and latent_shape is not None:
+                real_count = min(viz_samples, latents.shape[0])
+                real_latents = latents[:real_count].detach()
+                real_images = decode_latents_to_images(real_latents, vqvae)
+
+                sampled_latents = sample_diffusion_latents(
+                    model=model,
+                    scheduler=scheduler,
+                    num_samples=viz_samples,
+                    latent_shape=latent_shape,
+                )
+                sampled_images = decode_latents_to_images(sampled_latents, vqvae)
+
+                save_image_grid(real_images, recon_dir, sample_index, viz_rows, "recon")
+                save_image_grid(sampled_images, samples_dir, sample_index, viz_rows, "sample")
+                tqdm.write(
+                    f"Saved diffusion samples at step {global_step} (index {sample_index})."
+                )
+                sample_index += 1
 
         mean_loss = (
             float(np.mean(epoch_losses)) if epoch_losses else 0.0
