@@ -1,0 +1,7 @@
+# Core dependencies required to run the StableDiffusion-ULDM package
+numpy
+pillow
+PyYAML
+tqdm
+torch
+torchvision
