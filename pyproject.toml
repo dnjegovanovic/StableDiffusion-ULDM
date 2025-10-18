@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stable-diffusion-uldm"
+version = "0.1.0"
+description = "Latent diffusion utilities and VQ-VAE training pipeline for MNIST experiments."
+readme = "README.md"
+authors = [
+  {name = "Dusan"}
+]
+license = {text = "MIT"}
+requires-python = ">=3.9"
+dependencies = [
+  "numpy",
+  "pillow",
+  "PyYAML",
+  "tqdm",
+  "torch",
+  "torchvision",
+]
+
+[project.optional-dependencies]
+dev = [
+  "black",
+  "isort",
+  "pre-commit",
+]
+tests = [
+  "pytest",
+]
+
+[project.entry-points."console_scripts"]
+train-vqvae = "train_vqvae:main"
+train-ddpm-vqvae = "train_ddpm_vqvae:main"
+
+[tool.setuptools.packages.find]
+exclude = ["tests", "tests.*"]
+
+[tool.setuptools.package-data]
+"ulsd_model" = ["config.yml"]

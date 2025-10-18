@@ -121,6 +121,8 @@ Notes:
 - The heatmap scales the discrete code indices to the image size using nearest-neighbor for readability.
 - Extra deps for the script: `matplotlib`, `Pillow`, `PyYAML`.
 
+> **Note:** This repository relies on the external [`ddpm_model`](https://github.com/dnjegovanovic/DDPM.git) package for UNet blocks, schedulers, and related diffusion utilities. Install that project (or have it available in your environment) before running the training scripts here.
+
 ### VQ-VAE Architecture Diagram
 
 Generate a simple left-to-right architecture diagram directly from the config (no model instantiation required):
